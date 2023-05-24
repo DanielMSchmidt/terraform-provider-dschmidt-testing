@@ -9,7 +9,7 @@ on:
         required: true
 
 permissions:
-  contents: read # Changelog commit operations use service account PAT
+  contents: write
 
 env:
   CI_COMMIT_AUTHOR: DanielMSchmidt
@@ -54,7 +54,7 @@ jobs:
           git config --global user.email "${{ env.CI_COMMIT_EMAIL }}"
           git add .
           git commit -a -m "Update changelog"
-          git push "https://${{ env.CI_COMMIT_AUTHOR }}:${{ secrets.TF_DEVEX_COMMIT_GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
+          git push
 
   release-tag:
     needs: changelog
