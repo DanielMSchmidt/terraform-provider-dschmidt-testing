@@ -64,9 +64,6 @@ jobs:
           # Default input is the SHA that initially triggered the workflow. As we created a new commit in the previous job,
           # to ensure we get the latest commit we use the ref for checkout: 'refs/heads/<branch_name>'
           ref: ${{ github.ref }}
-          # Avoid persisting GITHUB_TOKEN credentials as they take priority over our service account PAT for `git push` operations
-          # More details: https://github.com/actions/checkout/blob/b4626ce19ce1106186ddf9bb20e706842f11a7c3/adrs/0153-checkout-v2.md#persist-credentials
-          persist-credentials: false
 
       - name: Git push release tag
         run: |
@@ -74,7 +71,7 @@ jobs:
           git config --global user.email "${{ env.CI_COMMIT_EMAIL }}"
 
           git tag "${{ inputs.versionNumber }}"
-          git push "https://${{ env.CI_COMMIT_AUTHOR }}:${{ secrets.TF_DEVEX_COMMIT_GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" "${{ inputs.versionNumber }}"
+          git push --tags
 
   release-notes:
     needs: [changelog-version, changelog, release-tag]
@@ -96,24 +93,28 @@ jobs:
           path: ./.changes/release-notes.txt
           retention-days: 1
 
-  terraform-provider-release:
-    name: "Terraform Provider Release"
-    needs: [release-notes]
-    permissions:
-      contents: write # Needed for goreleaser to create GitHub release
-    uses: hashicorp/ghaction-terraform-provider-release/.github/workflows/hashicorp.yml@01981baad5d35ce2342924e60ae91cf69fe31fd0 # v2.3.0
-    secrets:
-      hc-releases-key-prod: "${{ secrets.HC_RELEASES_KEY_PROD }}"
-      hc-releases-key-staging: "${{ secrets.HC_RELEASES_KEY_STAGING }}"
-      hc-releases-github-token: "${{ secrets.HASHI_RELEASES_GITHUB_TOKEN }}"
-      hc-releases-terraform-registry-sync-token: "${{ secrets.TF_PROVIDER_RELEASE_TERRAFORM_REGISTRY_SYNC_TOKEN }}"
-      setup-signore-github-token: "${{ secrets.HASHI_SIGNORE_GITHUB_TOKEN }}"
-      signore-client-id: "${{ secrets.SIGNORE_CLIENT_ID }}"
-      signore-client-secret: "${{ secrets.SIGNORE_CLIENT_SECRET }}"
-      hc-releases-host-staging: "${{ secrets.HC_RELEASES_HOST_STAGING }}"
-      hc-releases-host-prod: "${{ secrets.HC_RELEASES_HOST_PROD }}"
-    with:
-      release-notes: true
-      setup-go-version-file: "go.mod"
-      # Product Version (e.g. v1.2.3)
-      product-version: "${{ inputs.versionNumber }}"
+  goreleaser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab # v3.5.2
+        with:
+          # Allow goreleaser to access older tag information.
+          fetch-depth: 0
+      - uses: actions/setup-go@fac708d6674e30b6ba41289acaab6d4b75aa0753 # v4.0.1
+        with:
+          go-version-file: "go.mod"
+          cache: true
+      - name: Import GPG key
+        uses: crazy-max/ghaction-import-gpg@72b6676b71ab476b77e676928516f6982eef7a41 # v5.3.0
+        id: import_gpg
+        with:
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.PASSPHRASE }}
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@f82d6c1c344bcacabba2c841718984797f664a6b # v4.2.0
+        with:
+          args: release --clean
+        env:
+          # GitHub sets the GITHUB_TOKEN secret automatically.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GPG_FINGERPRINT: ${{ steps.import_gpg.outputs.fingerprint }}
