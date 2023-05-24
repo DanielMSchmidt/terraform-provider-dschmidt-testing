@@ -92,6 +92,8 @@ FEATURES:
 FEATURES:
 
 * **New Resource:** `time_static`
+## 0.0.5 (May 24, 2023)
+
 ## 0.0.4 (May 24, 2023)
 
 ## 0.0.3 (May 24, 2023)
